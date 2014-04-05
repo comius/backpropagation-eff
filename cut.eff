@@ -1,33 +1,64 @@
 type interval = float * float;;
+type cut = (float -> bool) * (float -> bool);;
 
-type 't real_comp = effect 
-  operation of_int : int -> 't
-  operation add : 't * 't ->  't
+type 'r real_comp = effect 
+  operation of_int : int -> 'r
+  operation add : 'r * 'r ->  'r
+  operation cut : cut -> 'r
 end;;
 
 let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
+let of_int i = (float_of_int i, float_of_int i);;
+let less (a1,b1) (a2,b2) = b1<a2
+let mul (a1,b1) (a2,b2) = (a1*.a2, b1*.b2)
+let sqr x = mul x x
 
-add (0.1,1.5) (0.2, 2.5);;
+
+let rec inhabitant rs x = 
+  if (rs x) then x else inhabitant rs (2.*.x);;
+
+let rec approx2 eps (l,u) (l0,u0) =
+  if u0-.l0 < eps then (l0,u0)
+     else let (l1,u1) = ( (l0+.u0-.eps*.0.5)/.2., (l0+.u0+.eps*.0.5)/.2.) in
+ 
+	let l2 = if (l l1) then l1 else l0 in
+        let u2 = if (u u1) then u1 else u0 in
+        	approx2 eps (l,u) (l2,u2);;
+
+let rec approx eps (l,u) =
+  let l0 = inhabitant l (-1.) in
+  let u0 = inhabitant u 1. in
+     approx2 eps (l,u) (l0,u0);;
 
 let forward1 c = handler
  | c#add (x,y) k -> k (add x y) 
- | c#of_int i k -> k (float_of_int i, float_of_int i)
+ | c#of_int i k -> k (of_int i)
+ | c#cut c k -> k (approx 1e-5 c)
 ;;
 
 let c = new real_comp in
   with forward1 c handle
     c#add (c#of_int 1,(0.2, 2.5));;
 
+let c = new real_comp in
+  with forward1 c handle
+    c#cut ((fun x->x<0 || x*.x<2.),(fun x-> x>0 && 2.<x*.x));;
+
+
 let forward c eps0 = handler
  | c#add (x,y) k -> (fun eps -> k (add x y) eps) 
  | c#of_int i k -> (fun eps -> k (float_of_int i, float_of_int i) eps)
+ | c#cut c k -> (fun eps -> k (approx eps c) eps)
  | val x -> (fun eps -> x) 
  | finally f -> f eps0
 ;;
 
-add (0.1,1.5) (0.2, 2.5);;
+let c = new real_comp in
+  with forward c 1e-5 handle
+    c#cut ((fun x->x<0 || x*.x<4.),(fun x->x>0 && 4.<x*.x));;
 
 let c = new real_comp in
-  with forward c 0.1 handle
-    c#add (c#of_int 1,(0.2, 2.5));;
+  with forward c 1e-1 handle
+    let sqrt x = c#cut ((fun y -> y<0. || y*.y<x),(fun y -> y>0. && x<y*.y)) in
+       c#add ((sqrt 2.),(sqrt 4.));;
 
