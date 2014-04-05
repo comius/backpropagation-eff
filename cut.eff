@@ -1,0 +1,33 @@
+type interval = float * float;;
+
+type 't real_comp = effect 
+  operation of_int : int -> 't
+  operation add : 't * 't ->  't
+end;;
+
+let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
+
+add (0.1,1.5) (0.2, 2.5);;
+
+let forward1 c = handler
+ | c#add (x,y) k -> k (add x y) 
+ | c#of_int i k -> k (float_of_int i, float_of_int i)
+;;
+
+let c = new real_comp in
+  with forward1 c handle
+    c#add (c#of_int 1,(0.2, 2.5));;
+
+let forward c eps0 = handler
+ | c#add (x,y) k -> (fun eps -> k (add x y) eps) 
+ | c#of_int i k -> (fun eps -> k (float_of_int i, float_of_int i) eps)
+ | val x -> (fun eps -> x) 
+ | finally f -> f eps0
+;;
+
+add (0.1,1.5) (0.2, 2.5);;
+
+let c = new real_comp in
+  with forward c 0.1 handle
+    c#add (c#of_int 1,(0.2, 2.5));;
+
