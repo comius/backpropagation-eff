@@ -1,0 +1,48 @@
+(* Proof of concept. *)
+
+type q = float;;
+type interval = q * q;;
+type real = Real of float;;
+type realapprox = q -> interval;;
+
+type ('r1,'r2) real_comp = effect 
+  operation input : 'r1 -> 'r2
+  operation f : 'r2 -> 'r2
+end;;
+
+(* Operation f(x)=x+1 *)
+let plus1 (a,b) = (a+.1.,b+.1.);;
+
+(* Returns a real number accurate to 2*eps. *)
+let approx x eps = match x with
+  | Real(q) -> (q-.eps, q+.eps)
+
+(*
+  The tranformation basically threads together value realcalc of type realapprox. 
+*)
+let forward c eps0 = handler
+   | c#input x k -> k (fun eps -> approx x eps) 
+   | c#f realcalc k -> k (fun eps -> plus1 (realcalc eps)) 
+   | finally f -> f eps0
+;;
+
+let backward c eps0 = handler
+   | c#input x k -> k (fun eps -> approx x eps) 
+   | c#f realcalc k -> k (fun eps -> plus1 (realcalc (eps/.2.))) 
+   | finally f -> f eps0
+;;
+
+let c = new real_comp in
+with forward c 0.1
+ handle
+  c#f (c#f (c#f (c#input (Real 0.))));;
+(* - : interval = (2.9, 3.1) *)
+
+let c = new real_comp in
+with backward c 0.16
+ handle
+  c#f (c#f (c#f (c#input (Real 0.))));;
+(*- : float × float = (2.98, 3.02)  *)
+
+
+
