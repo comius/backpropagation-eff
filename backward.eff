@@ -1,6 +1,6 @@
 
 (*
-Proof of concept. Using fake type real and approximation.
+Proof of concept. Using fake type real and fake approximation.
 *)
 
 type q = float;;
@@ -28,10 +28,10 @@ let c = new real_comp;;
 
 with forward c 0.1 handle
   (c#f (c#f (c#f (EReal 0.))), c#f (EReal 0.));;
-(* - : real × rrr = (Int (2.9, 3.1), R Int (0.9, 1.1))*)
+(* - : eager_real × eager_real = (ApproxReal (2.9, 3.1), ApproxReal (0.9, 1.1)) *)
 
 
-(* For backward we need to call continuation twice:
+(* For backward we call continuation twice:
   first to get the requried eps,
   second to do the actual calculation.
   Remark: giving a good interval to the first call of continuation is probably better, but this is just a proof of concept. *)
@@ -45,36 +45,33 @@ let backward c eps0 = handler
 
 with backward c 0.16 handle
   (c#f (c#f (c#f (EReal 0.))),  c#f (EReal 0.));;
-(* - : real × rrr = (Int (2.99, 3.01), R Int (0.92, 1.08)) *)
+(* - : eager_real × eager_real = (ApproxReal (2.98, 3.02), ApproxReal (0.84, 1.16)) *)
+
+
+
 
 
 (* The following might be better but DOES NOT work *)
 let fetch_eps eps0 = handler
-  | val x -> print "v"; eps0
-  | c#f x k -> print "h"; let eps = k x in eps/.2.
+  | val x -> eps0
+  | c#f x k -> let eps = k x in eps/.2.
 ;;
 
 with fetch_eps 0.16 handle
   (c#f (c#f (c#f (EReal 0.))));;
+(* - : float = 0.02 *)
+
 
 let calculate_backward eps0 = handler
   | c#f x k -> 
 	match x with 
-	  | EReal _ -> print "r";
+	  | EReal _ ->
 		let eps = (with fetch_eps eps0 handle k (ApproxReal (0.,0.)))in (* fetch eps *)
 	                 k (ApproxReal(plus1 (approx (eps/.2.) (x)))) (*calculate the result with it*)
-	  | ApproxReal (a,b)-> print "i"; k (ApproxReal(plus1 (a,b)))
+	  | ApproxReal (a,b)-> k (ApproxReal(plus1 (a,b)))
 	  | lr -> k lr
 ;;
 
 with calculate_backward 0.16 handle
   (c#f (c#f (c#f (EReal 0.))), c#f (EReal 0.));;
-
-
-let c2 = new real_comp @ 0.16 with
-  operation f x @ eps ->  ((ApproxReal(plus1 (approx eps x))),eps/.2.)
-end;;
-
-(c2#f (c2#f (c2#f (EReal 0.))), c2#f (EReal 0.));;
-
 

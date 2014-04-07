@@ -1,0 +1,58 @@
+(* Proof of concept, working hard to keep pure Real types. *)
+
+type q = float;;
+type interval = q * q;;
+type real = Real of float;;
+type realapprox = RealApprox of q -> interval | NoApprox;; (* This type is used only in transformed code *)
+type 'r real_comp = effect 
+  operation f : 'r -> 'r
+end;;
+
+(* Operation f(x)=x+1 *)
+let plus1 (a,b) = (a+.1.,b+.1.);;
+
+(* Returns a real number accurate to 2*eps. *)
+let approx x eps = match x with
+  | Real(q) -> (q-.eps, q+.eps)
+
+(* A helper function:
+  - where there's not approximating function given,
+    input x and the default approximation function is used,
+  - if there is approximating function, x is discarded *)
+let localapprox realcalc x eps = 
+	match realcalc with 
+        	| NoApprox -> approx x eps
+		| RealApprox epstoint -> epstoint eps;;
+(*
+  The tranformation basically threads together value realcalc of type realapprox. 
+*)
+let forward c eps0 = handler
+   | val x -> fun realcalc -> realcalc
+   | c#f x k -> fun realcalc ->	k x (RealApprox (fun eps -> plus1 (localapprox realcalc x eps)))
+   | finally f -> match f (NoApprox) with
+      | NoApprox -> (1./.0.,1./.0.)
+      | RealApprox epstoint -> epstoint eps0 
+;;
+
+let backward c eps0 = handler
+   | val x -> fun realcalc -> realcalc
+   | c#f x k -> fun realcalc ->	k x (RealApprox (fun eps -> plus1 (localapprox realcalc x (eps/.2.))))
+   | finally f -> match f (NoApprox) with
+      | NoApprox -> (1./.0.,1./.0.)
+      | RealApprox epstoint -> epstoint eps0 
+;;
+
+let c = new real_comp in
+with forward c 0.1
+ handle
+  c#f (c#f (c#f (Real 0.)));;
+(* - : interval = (2.9, 3.1) *)
+
+
+let c = new real_comp in
+with backward c 0.16
+ handle
+  c#f (c#f (c#f (Real 0.)));;
+(*  : interval = (2.98, 3.02) *)
+
+

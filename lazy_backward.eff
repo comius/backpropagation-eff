@@ -1,6 +1,8 @@
+(* Proof of concept, using "lazy" reals *)
+
 type q = float;;
 type interval = q * q;;
-type lazy_real = LReal of float | LazyApprox of q -> interval
+type lazy_real = LReal of float | LazyApprox of q -> interval (* LazyApprox carries the data over *)
 
 type 'r real_comp = effect 
   operation f : 'r -> 'r
@@ -27,11 +29,11 @@ let lazy_backward c eps0 = handler
 let c = new real_comp in
 with lazy_forward c 0.1 handle
   c#f (c#f (c#f (LReal 0.)));;
-
+(* - : interval = (2.9, 3.1) *)
 
 let c = new real_comp in
 with lazy_backward c 0.16 handle
   c#f (c#f (c#f (LReal 0.)));;
-
+(* - : interval = (2.98, 3.02) *)
 
 
