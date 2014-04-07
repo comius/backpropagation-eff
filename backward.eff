@@ -71,3 +71,10 @@ with calculate_backward 0.16 handle
   (c#f (c#f (c#f (EReal 0.))), c#f (EReal 0.));;
 
 
+let c2 = new real_comp @ 0.16 with
+  operation f x @ eps ->  ((ApproxReal(plus1 (approx eps x))),eps/.2.)
+end;;
+
+(c2#f (c2#f (c2#f (EReal 0.))), c2#f (EReal 0.));;
+
+
