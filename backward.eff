@@ -5,30 +5,29 @@ Proof of concept. Using fake type real and approximation.
 
 type q = float;;
 type interval = q * q;;
-type real = Const of float | Int of interval;; (* Const represents fake real number, Int represents it's approximation*)
-type rrr = R of real;; (* just for another test *)
+type eager_real = EReal of float | ApproxReal of interval;; (* EReal represents fake real number, ApproxReal represents it's approximation*)
 
-type real_comp = effect 
-  operation f : real -> real
+type 'r real_comp = effect 
+  operation f : 'r -> 'r
 end;;
 
-(* Returns a real number accurate to 2*eps. *)
+(* Returns an interval approximating real number accurate to 2*eps. *)
 let approx eps r = match r with
-  | Const(q) -> (q-.eps, q+.eps)
-  | Int(i) -> i;;
+  | EReal(q) -> (q-.eps, q+.eps)
+  | ApproxReal(i) -> i
 
 (* Operation f(x)=x+1 *)
 let plus1 (a,b) = (a+.1.,b+.1.);;
 
 (* Forward is simple, just calculate all the inputs with eps precision *)
 let rec forward c eps0 = handler
-  | c#f x k -> k (Int(plus1 (approx eps0 (x))))
+  | c#f x k -> k (ApproxReal(plus1 (approx eps0 (x))))
 ;; 
 
 let c = new real_comp;;
 
 with forward c 0.1 handle
-  (c#f (c#f (c#f (Const 0.))), R (c#f (Const 0.)));;
+  (c#f (c#f (c#f (EReal 0.))), c#f (EReal 0.));;
 (* - : real × rrr = (Int (2.9, 3.1), R Int (0.9, 1.1))*)
 
 
@@ -38,14 +37,14 @@ with forward c 0.1 handle
   Remark: giving a good interval to the first call of continuation is probably better, but this is just a proof of concept. *)
 let backward c eps0 = handler
   | val x -> (eps0, x)
-  | c#f x k -> let (eps, _) = k (Int (0.,0.)) in (* fetch eps *)
-               let (_, y) = k (Int(plus1 (approx (eps/.2.) (x)))) in (*calculate the result with it*)
+  | c#f x k -> let (eps, _) = k (ApproxReal (0.,0.)) in (* fetch eps *)
+               let (_, y) = k (ApproxReal(plus1 (approx eps (x)))) in (*calculate the result with it*)
                 (eps/.2., y) (* return it with the eps we need *)
   | finally (eps, y) -> y  (* remove eps *)
 ;;
 
 with backward c 0.16 handle
-  (c#f (c#f (c#f (Const 0.))), R (c#f (Const 0.)));;
+  (c#f (c#f (c#f (EReal 0.))),  c#f (EReal 0.));;
 (* - : real × rrr = (Int (2.99, 3.01), R Int (0.92, 1.08)) *)
 
 
@@ -56,18 +55,19 @@ let fetch_eps eps0 = handler
 ;;
 
 with fetch_eps 0.16 handle
-  (c#f (c#f (c#f (Const 0.))));;
+  (c#f (c#f (c#f (EReal 0.))));;
 
 let calculate_backward eps0 = handler
   | c#f x k -> 
 	match x with 
-	  | Const _ -> print "r";
-		let eps = (with fetch_eps eps0 handle k (Int (0.,0.)))in (* fetch eps *)
-	                 k (Int(plus1 (approx (eps/.2.) (x)))) (*calculate the result with it*)
-	  | Int (a,b)-> print "i"; k (Int(plus1 (a,b)))
+	  | EReal _ -> print "r";
+		let eps = (with fetch_eps eps0 handle k (ApproxReal (0.,0.)))in (* fetch eps *)
+	                 k (ApproxReal(plus1 (approx (eps/.2.) (x)))) (*calculate the result with it*)
+	  | ApproxReal (a,b)-> print "i"; k (ApproxReal(plus1 (a,b)))
+	  | lr -> k lr
 ;;
 
 with calculate_backward 0.16 handle
-  (c#f (c#f (c#f (Const 0.))), R (c#f (Const 0.)));;
+  (c#f (c#f (c#f (EReal 0.))), c#f (EReal 0.));;
 
 
