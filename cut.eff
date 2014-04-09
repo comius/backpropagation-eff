@@ -2,13 +2,18 @@
 type q = float;;
 type interval = q * q;;
 
-type real = TrivialCut of q * q | Cut of (q -> bool) * (q -> bool);;
-let of_int i =  TrivialCut (float_of_int i, float_of_int i);;
-let of_float f = TrivialCut (f, f);;
+type sigma = TrivialSigma of bool | Exists of q -> sigma;;
+type real = TrivialCut of q * q | Cut of (real -> sigma) * (real -> sigma);;
 
-type 'r real_comp = effect 
-  operation eval : 'r -> interval
-  operation add : 'r * 'r ->  interval
+let of_int i =  TrivialCut (float_of_int i, float_of_int i);;
+let of_float f = TrivialCut (f,f);;
+
+type real_comp = effect 
+  operation add : real * real ->  real
+  operation mul : real * real ->  real
+  operation less_ : real * real ->  sigma
+  operation or_ : sigma * sigma -> sigma
+  operation and_ : sigma * sigma -> sigma
 end;;
 
 let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
@@ -16,14 +21,18 @@ let less (a1,b1) (a2,b2) = b1<a2
 let mul (a1,b1) (a2,b2) = (a1*.a2, b1*.b2)
 let sqr x = mul x x
 
+let approx_sigma s = match s with
+  | TrivialSigma(b) -> b
+  | Exists(f) -> false;;
+
 let rec inhabitant rs x = 
-  if (rs x) then x else inhabitant rs (2.*.x);;
+  if approx_sigma (rs (of_float x)) then x else inhabitant rs (2.*.x);;
 
 let rec approx_inh_cut eps (l,u) (l0,u0) =
   if u0-.l0 < eps then (l0,u0)
      else let (l1,u1) = ( (l0+.u0-.eps*.0.5)/.2., (l0+.u0+.eps*.0.5)/.2.) in
-	let l2 = if (l l1) then l1 else l0 in
-        let u2 = if (u u1) then u1 else u0 in
+	let l2 = if (approx_sigma (l (of_float l1))) then l1 else l0 in
+        let u2 = if (approx_sigma (u (of_float u1))) then u1 else u0 in
         	approx_inh_cut eps (l,u) (l2,u2);;
 
 let approx_cut eps (l,u) =
@@ -32,24 +41,34 @@ let approx_cut eps (l,u) =
      approx_inh_cut eps (l,u) (l0,u0);;
 
 let approx eps r = match r with
-  | TrivialCut (l,u) -> (l,u)
-  | Cut (l,u) -> approx_cut eps (l,u);;
-
+  | Cut (l,u) ->  (approx_cut eps (l,u))
+  | TrivialCut (l,u) -> (l,u);;
 
 let simple c eps0 = handler
- | c#add (x,y) k -> k (add (approx eps0 x) (approx eps0 y))
- | c#eval c k -> k (approx eps0 c)
- | finally c -> c
+ | c#add (x,y) k -> k (TrivialCut(add (approx eps0 x) (approx eps0 y)))
+ | c#mul (x,y) k -> k (TrivialCut(mul (approx eps0 x) (approx eps0 y)))
+ | c#less_ (x,y) k -> let (a1,b1) = approx eps0 x in
+		     let (a2,b2) = approx eps0 y in 
+			k (TrivialSigma((b1<a2)))
+ | c#or_ (x,y) k -> let b1 = approx_sigma x in
+		    let b2 = approx_sigma y in 
+			k (TrivialSigma(b1 || b2)) 
+ | c#and_ (x,y) k -> let b1 = approx_sigma x in
+		    let b2 = approx_sigma y in 
+			k (TrivialSigma(b1 && b2))
+ | finally c ->  c
 ;;
 
 let c = new real_comp in
   with simple c 0.1 handle
-    c#add (of_int 1,TrivialCut (0.2, 2.5));;
+    c#add ((of_int 1),TrivialCut (0.2,9.3));;
 
 let c = new real_comp in
   with simple c 0.1 handle
-    c#eval (Cut ((fun x->x<0 || x*.x<2.),(fun x-> x>0 && 2.<x*.x)));;
-
+    c#add (of_int 0,Cut (
+		 (fun x->(with simple c 0.1 handle c#or_ ((c#less_ (x,of_int 0)),(c#less_ ((c#mul (x,x)),(of_int 2)))))),
+		 (fun x->(with simple c 0.1 handle c#and_ ((c#less_ (of_int 0,x)),(c#less_ ((of_int 2),(c#mul (x,x)))))))
+             ));;
 
 let forward c eps0 = handler
  | c#add (x,y) k -> (fun eps -> k (add (approx eps x) (approx eps y)) eps) 
