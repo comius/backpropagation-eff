@@ -1,24 +1,30 @@
+(* Definitions of types *)
 
 type q = float;;
 type interval = q * q;;
 
-type ('s, 'r) real_comp = effect 
-  operation cut : (('r -> 's) * ('r -> 's)) -> 'r
+type ('a, 's, 'r) real_comp = effect 
+  operation ar : ('r -> 's) -> 'a
+  operation cut : (('a) * ('a)) -> 'r
   operation of_float : q -> 'r
   operation add : 'r * 'r ->  'r
   operation mul : 'r * 'r ->  'r
   operation less_ : 'r * 'r ->  's
   operation or_ : 's * 's -> 's
   operation and_ : 's * 's -> 's
-  operation exists : interval * ('r -> 's) -> 's
-  operation forall : interval * ('r -> 's) -> 's
+  operation exists : interval * ('a) -> 's
+  operation forall : interval * ('a) -> 's
 end;;
+
+(* Interval functions *)
 
 let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
 let less (a1,b1) (a2,b2) = b1<a2
 let mul (a1,b1) (a2,b2) = (a1*.a2, b1*.b2)
 let sqr x = mul x x
 
+
+(* Approximation  *)
 let rec inhabitant rs x = 
   	match rs (x,x) with
 		| true -> x 
@@ -52,71 +58,114 @@ let rec approx_forall eps (x1,x2) f =
     let m = (x1 +. x2) /. 2. in
 	(approx_exists eps (x1,m) f) && (approx_exists eps (m,x2) f);;
 
-type forwardcomp = (interval * interval, bool) real_comp;;
 
-let c = new real_comp;;
+(* Forward propagation handler *)
 
-let rec forward eps0 = handler
- | c#of_float q k -> k (q,q)
- | c#cut (l,u) k -> k (with forward eps0 handle
-				approx_cut eps0 (l,u))
+let rec forward c eps0 = handler
+ | c#ar f k -> k (let f x = (with forward_s c eps0 handle f x) in f)			
+ | c#of_float q k -> k ( (q,q))
+ | c#cut (l,u) k -> k (approx_cut eps0 (l, u))
  | c#add (x,y) k -> k (add x y)
  | c#mul (x,y) k -> k (mul x y)
  | c#less_ (x,y) k -> k (less x y)
  | c#or_ (x,y) k -> k (x || y) 
  | c#and_ (x,y) k -> k (x && y)
- | c#exists (i,f) k -> k (with forward eps0 handle
-				approx_exists eps0 i f)
- | c#forall (i,f) k -> k (with forward eps0 handle
-				approx_forall eps0 i f)
-;;
+ | c#exists (i,f) k -> k (approx_exists eps0 i f)
+ | c#forall (i,f) k -> k (approx_forall eps0 i f)
+and forward_s  c eps0 = handler (*just a copy*)
+ | c#ar f k -> k (let f x = (with forward_s c eps0 handle f x) in f)			
+ | c#of_float q k -> k ( (q,q))
+ | c#cut (l,u) k -> k (approx_cut eps0 (l, u))
+ | c#add (x,y) k -> k (add x y)
+ | c#mul (x,y) k -> k (mul x y)
+ | c#less_ (x,y) k -> k (less x y)
+ | c#or_ (x,y) k -> k (x || y) 
+ | c#and_ (x,y) k -> k (x && y)
+ | c#exists (i,f) k -> k (approx_exists eps0 i f)
+ | c#forall (i,f) k -> k (approx_forall eps0 i f);;
 
-let rec backward eps0 = handler
+(* Backwards propagation *)
+let rec backward c eps0 = handler
+ | c#ar f k -> k (fun eps -> let f' x = (with backward_s c eps handle f (fun eps -> x)) in f')
  | c#of_float q k -> k (fun eps -> (q,q))
- | c#cut (l,u) k -> k (fun eps -> 
-		let l' x = with backward eps handle (l (fun eps -> x)) in
-		let u' x = with backward eps handle (u (fun eps -> x)) in
-		 approx_cut eps (l', u'))
+ | c#cut (l,u) k -> k (fun eps -> approx_cut eps (l eps, u eps))
  | c#add (x,y) k -> k (fun eps -> add (x (eps/.2.)) (y (eps/.2.)))
  | c#mul (x,y) k -> k (fun eps -> mul (x (eps/.2.)) (y (eps/.2.)))
  | c#less_ (x,y) k -> k (fun eps -> less (x eps) (y eps))
  | c#or_ (x,y) k -> k (fun eps -> (x eps) || (y eps)) 
  | c#and_ (x,y) k -> k (fun eps -> (x eps) && (y eps))
+ | c#exists (i,f) k -> k (fun eps -> approx_exists eps i (f eps))
+ | c#forall (i,f) k -> k (fun eps -> approx_forall eps i (f eps))
+ | finally f -> f eps0
+and backward_s c eps0 = handler (* just a copy *)
+ | c#ar f k -> k (fun eps -> let f' x = (with backward_s c eps handle f (fun eps -> x)) in f')			
+ | c#of_float q k -> k (fun eps -> (q,q))
+ | c#cut (l,u) k -> k (fun eps -> approx_cut eps (l eps, u eps))
+ | c#add (x,y) k -> k (fun eps -> add (x (eps/.2.)) (y (eps/.2.)))
+ | c#mul (x,y) k -> k (fun eps -> mul (x (eps/.2.)) (y (eps/.2.)))
+ | c#less_ (x,y) k -> k (fun eps -> less (x eps) (y eps))
+ | c#or_ (x,y) k -> k (fun eps -> (x eps) || (y eps)) 
+ | c#and_ (x,y) k -> k (fun eps -> (x eps) && (y eps))
+ | c#exists (i,f) k -> k (fun eps -> approx_exists eps i (f eps))
+ | c#forall (i,f) k -> k (fun eps -> approx_forall eps i (f eps))
  | finally f -> f eps0
 ;;
 
 
+(* syntax shugar *)
+let c = new real_comp;;
 let ( +.. ) a b = c#add (a,b);;
 let ( *.. ) a b = c#mul (a,b);;
 let ( <.. ) a b = c#less_ (a,b);;
 let ( &&.. ) a b = c#and_ (a,b);;
 let ( ||.. ) a b = c#or_ (a,b);;
 let of_float a = c#of_float a;;
-let cut a b = c#cut (a,b);;
-let exists i f = c#exists (i,f);;
-let forall i f = c#forall (i,f);;
+let cut a b = c#cut (c#ar a, c#ar b);;
+let exists i f = c#exists (i,c#ar f);;
+let forall i f = c#forall (i,c#ar f);;
 
-with forward 0.1 handle 
+
+(* examples *)
+with forward c 0.1 handle 
   exists (0.,1.) (fun x-> ( ( x +.. (of_float -0.9)) *.. x) <.. (of_float 0.01));;
 
-with forward 0.1 handle 
-    (of_float 1.) +.. (of_float 2.);;
+with forward c 0.1 handle 
+     ((of_float 1.) +.. (of_float 2.));;
 
-with forward 1e-5 handle
-    (of_float 1.) +.. cut (fun x-> (x <.. (c#of_float 0.)) ||.. ((x *.. x) <.. (of_float 2.)))
+with forward c 1e-5 handle 
+    (of_float 1.) +.. cut (fun x-> (x <.. (of_float 0.)) ||.. ((x *.. x) <.. (of_float 2.)))
 	(fun x-> ((of_float 0.) <.. x) &&.. ((of_float 2.) <.. (x *.. x)))
              ;;
 
-with backward 0.1 handle 
+(* copy & examples of backwards propagation *)
+let c = new real_comp;;
+let ( +.. ) a b = c#add (a,b);;
+let ( *.. ) a b = c#mul (a,b);;
+let ( <.. ) a b = c#less_ (a,b);;
+let ( &&.. ) a b = c#and_ (a,b);;
+let ( ||.. ) a b = c#or_ (a,b);;
+let of_float a = c#of_float a;;
+let cut a b = c#cut (c#ar a, c#ar b);;
+let exists i f = c#exists (i,c#ar f);;
+let forall i f = c#forall (i,c#ar f);;
+
+
+with backward c 0.1 handle 
+    (of_float 1.);;
+
+with backward c 0.1 handle 
     (of_float 1.) +.. (of_float 2.);;
 
-with backward 1e-5 handle
+with backward c 1e-5 handle
     cut (fun x-> (x <.. (of_float 0.)) ||.. (x*..x <.. (of_float 4.)))
         (fun x -> ((of_float 0.) <.. x) &&.. ((of_float 4.) <.. x*..x));;
 
-with backward 1e-1 handle
+with backward c 1e-1 handle
     let sqrt x = cut (fun y -> (y <.. (of_float 0.)) ||.. ( (y*..y) <.. x))
 		     (fun y -> ((of_float 0.) <.. y) &&.. (x <.. (y*..y))) in
        (sqrt (of_float 2.)) +.. (sqrt (of_float 4.));;
-
+(*
+with forward c 1e-1 handle
+    let rec r y = cut (fun x -> ((r 0) <.. (of_float -1.) +.. x))
+		    (fun x -> ((of_float -1.) +.. x <.. (r 0))) in r 0;;*)
 
