@@ -1,0 +1,23 @@
+
+(* Assert in eff happens after this code. *)
+
+type ('s, 'r) real_comp = effect 
+  operation cut : 'r -> 'r
+  operation exists : 's -> 's
+end;;
+
+let c = new real_comp;;
+
+(* Notice that the handlers are actually independent. There's no problem if you remove the first handler. *)
+let rec forward_r () = handler
+ | c#cut x k -> k (with forward_r () handle ())
+and
+  forward_s () = handler
+ | c#exists x k -> k (with forward_s () handle () )
+;;
+
+
+with forward_s () handle 
+  c#exists ();;
+
+

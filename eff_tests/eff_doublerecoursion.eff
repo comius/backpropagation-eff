@@ -1,0 +1,32 @@
+(* 
+  Recursively defined handlers aren't polymorphic, but there's a workaround that is.
+*)
+
+
+type 'a eff = effect
+  operation op : 'a -> 'a
+end;;
+
+let rec rhandler c = handler
+  | c#op a k -> k (with rhandler c handle 1.0);;
+
+
+let rec rhandler1 c = handler
+  | c#op a k -> k (with rhandler2 c handle 1.0)
+and
+  rhandler2 c = handler
+  | c#op a k -> k (with rhandler2 c handle 1.0);;
+
+
+let c = new eff;;
+with rhandler1 c handle 1. < (c#op 5.)
+
+(* I couldn't call the line above with rhandler1. *)
+
+(*
+val rhandler : float eff ⟶  (float ⟹  float) = <fun>
+val rhandler1 : float eff ⟶  (α ⟹  α) = <fun>
+val rhandler2 : float eff ⟶  (float ⟹  float) = <fun>
+val c : _α eff = <instance #6>
+- : bool = false
+*)

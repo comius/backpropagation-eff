@@ -1,0 +1,31 @@
+
+(*
+Instances of effects get types after first handler. They stop being polymorphic.
+*)
+
+type 'a eff = effect
+  operation op : 'a -> 'a
+end;;
+
+let c = new eff;;
+
+let int_handler c = handler
+  | c#op a k -> k (a*2);;
+
+let float_handler c = handler
+  | c#op a k -> k (a*.2.);;
+
+
+#type c;;
+(* - : _α eff *)
+
+with float_handler c handle ();;
+(* - : unit = ()  *)
+
+#type c;;
+(* - : float eff *)
+
+(* fails in next line *)
+with int_handler c handle ();;
+
+#type c;;
