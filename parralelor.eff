@@ -1,0 +1,37 @@
+
+type 'a por = Left of 'a | Right of 'a;;
+type 'a cont = Value of 'a | Continuation of (unit -> 'a cont)
+type resumable = effect
+  operation yield : unit -> unit
+end;;
+
+
+let c = new resumable;;
+
+let rec continue l r =
+  match l with
+    | Value vl -> Left vl
+    | Continuation ka -> 
+      (match r with 
+        | Value vr -> Right vr
+        | Continuation kb -> continue (ka ()) (kb ()))
+;;
+ (*match (l,r) with
+    | Continuation ka, Continuation kb -> continue (ka ()) (kb ())
+    | Value va, _ -> Left va
+    | _, Value vb -> Right vb;;*)
+ 
+let continuator = handler
+  | c#yield () ka -> Continuation(ka)
+  | val x -> Value(x)
+;;
+
+let parallelor a b =
+   continue (with continuator handle (a ())) (with continuator handle (b ()));;
+
+let rec count n m =
+  c#yield (); 
+  if n = 0 then begin m end else begin count (n-1) (m+1) end;;
+
+parallelor (fun _ -> count 1000000000 0) (fun _ -> count 2 0);;
+
