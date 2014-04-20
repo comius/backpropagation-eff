@@ -1,0 +1,107 @@
+(* Interval functions *)
+
+let dzero = 0.;;
+let dmul a b = a *. b;;
+let dmin a b = if a<b then a else b;;
+let dmax a b = if a>b then a else b;;
+let dpow a k = a **. (float_of_int k);;
+
+let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
+
+let less (a1,b1) (a2,b2) = b1<a2
+
+let neg (a,b) = (-.b,-.a);;
+
+
+let mul (a,b) (c,d) =
+      (    (if a<0 then
+	      if b<0 then
+		if d<0 then dmul b d else dmul a d
+	      else (* positive [b] *)
+		if c<0 then
+		  if d<0 then dmul b c else dmin (dmul a d) (dmul b c)
+		else (* positive [c] *)
+		  if d<0 then dzero else dmul a d
+	    else (* positive [a] *)
+	      if b<0 then
+		if c<0 then
+		  if d<0 then dmul b d else dzero
+		else (* positive [c] *)
+		  if d<0 then dmax (dmul a c) (dmul b d) else dmul a c
+	      else (* positive [b] *)
+		if c<0 then dmul b c else dmul a c),
+
+	    (if a<0 then
+	      if b<0 then
+		if c<0 then dmul a c else dmul b c
+	      else (* positive [b] *)
+		if c<0 then
+		  if d<0 then dmul a c else dmax (dmul a c) (dmul b d)
+		else (* positive [c] *)
+		  if d<0 then dzero else dmul b d
+	    else (* positive [a] *)
+	      if b<0 then
+		if c<0 then
+		  if d<0 then dmul a d else dzero
+		else (* positive [c] *)
+		  if d<0 then dmin (dmul a d) (dmul b c) else dmul b c
+	      else (* positive [b] *)
+		if d<0 then dmul a d else dmul b d)
+      );;
+
+  let pow (a,b) k =
+      if k mod 2 = 1 then
+	((dpow a k), (dpow b k)) (* What if k<0??*)
+      else
+	      ((
+		if a<0 then
+		  if b<0 then
+		    dpow b k
+		  else (* non-negative [b] *)
+		    dzero
+		else (* non-negative [a] *)
+		  if b<0 then
+		    dmax (dpow a k) (dpow b k)
+		  else (* non-negative [b] *)
+		    dpow a k),
+		(if a<0 then
+		  if b<0 then
+		    dpow a k
+		  else (* non-negative [b] *)
+		    dmax (dpow a k) (dpow b k)
+		else (* non-negative [a] *)
+		  if b<0 then
+		    dzero
+		  else (* non-negative [b] *)
+		    dpow b k
+	    ) )
+(*	    
+let inv (a,b) =
+      ((
+	    match a, b with
+	      | `negative, `negative -> linv b
+	      | `zero, `negative -> linv b
+	      | `positive, `negative -> D.positive_infinity
+	      | `negative, `zero -> D.negative_infinity
+	      | `zero, `zero -> D.negative_infinity
+	      | `positive, `zero -> D.positive_infinity
+	      | `negative, `positive -> D.negative_infinity
+	      | `zero, `positive -> D.negative_infinity
+	      | `positive, `positive -> linv b
+	),
+	(
+	  let uinv = D.inv ~prec ~round:(D.anti round) in
+	    match D.sgn a, D.sgn b with
+	      | `negative, `negative -> uinv a
+	      | `zero, `negative -> D.negative_infinity
+	      | `positive, `negative -> D.negative_infinity
+	      | `negative, `zero -> D.positive_infinity
+	      | `zero, `zero -> D.positive_infinity
+	      | `positive, `zero -> uinv a
+	      | `negative, `positive -> D.positive_infinity
+	      | `zero, `positive -> D.positive_infinity
+	      | `positive, `positive -> uinv a
+	) )
+
+  let div i j = mul i (inv j)
+*)

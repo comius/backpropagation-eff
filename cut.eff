@@ -1,5 +1,7 @@
 (* Definitions of types *)
 
+#use "interval.eff";;
+
 type q = float;;
 type interval = q * q;;
 
@@ -15,14 +17,6 @@ type ('a, 's, 'r) real_comp = effect
   operation exists : interval * ('a) -> 's
   operation forall : interval * ('a) -> 's
 end;;
-
-(* Interval functions *)
-
-let add (a1,b1) (a2,b2) = (a1+.a2,b1+.b2);;
-let less (a1,b1) (a2,b2) = b1<a2
-let mul (a1,b1) (a2,b2) = (a1*.a2, b1*.b2)
-let sqr x = mul x x
-
 
 (* Approximation  *)
 let rec inhabitant rs x = 
